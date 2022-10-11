@@ -418,6 +418,7 @@
 
               if (dr < r_step .AND. f > 0.0_dp) then  ! step factor
                   factor = 1.0_dp
+                  s%mixing_type(k) = anonymous_mixing
               else
                   if ( f2 > 0.0_dp) then                ! exponential factor
                       factor = exp(-2.0_dp*(dr-r_step)/(f2*Hp_cb))
