@@ -360,8 +360,7 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
-          ! call JermynAnders_active_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
-          call JermynAnders_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
+          call Dissipation_balanced_penetration(s, id)
 
           ! Extract parameters
           f = alpha_PZ        ! extend of step function (a_ov)
@@ -455,7 +454,7 @@
 
 
 
-      subroutine JermynAnders_penetration(s, id)
+      subroutine Dissipation_balanced_penetration(s, id)
          use eos_def
          use star_lib
          use kap_def
@@ -514,7 +513,7 @@
             Lint = Lint + dLint
          end do
 
-      end subroutine JermynAnders_penetration
+      end subroutine Dissipation_balanced_penetration
 
 
       end module run_star_extras
