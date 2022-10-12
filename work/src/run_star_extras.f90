@@ -360,7 +360,7 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
-          if ((i .eq. 1) .or. (s%mixing_type(s%nz) .eq. convective_mixing) ) then
+          if ((i .ne. 1) .or. (s%mixing_type(s%nz) .ne. convective_mixing)) then
               write(*,'(A,i2,A,i2)') 'ERROR: dissipation_balanced_penetration can only be used for core convection, &
                     &so the first convective boundary. The routine got called for convective boundary number ',i, &
                     &', and the mixing type in the core was', s%mixing_type(s%nz)
