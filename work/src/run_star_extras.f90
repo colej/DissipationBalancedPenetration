@@ -368,7 +368,6 @@
               return
           end if
 
-          ! call JermynAnders_active_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
           call Dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
 
           ! Extract parameters
