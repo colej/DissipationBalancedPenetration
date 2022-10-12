@@ -3,4 +3,6 @@
 *.o
 *.mod
 */photos/
-*LOGS/*.history
+*LOGS
+*/make
+*/star
