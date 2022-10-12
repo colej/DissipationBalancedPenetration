@@ -360,13 +360,21 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
+          if ((i .eq. 1) .or. (s%mixing_type(s%nz) .eq. convective_mixing) ) then
+              write(*,'(A,i2,A,i2)') 'ERROR: dissipation_balanced_penetration can only be used for core convection, &
+                    &so the first convective boundary. The routine got called for convective boundary number ',i, &
+                    &', and the mixing type in the core was', s%mixing_type(s%nz)
+              ierr = -1
+              return
+          end if
+
           ! call JermynAnders_active_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
-          call JermynAnders_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
+          call Dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
 
           ! Extract parameters
           f = alpha_PZ        ! extend of step function (a_ov)
           f0 = s%overshoot_f0(j)
-          f2 = 0.01            ! exponential decay (f_ov)
+          f2 = s%overshoot_f(j)            ! exponential decay (f_ov)
 
           D0 = s%overshoot_D0(j)
           Delta0 = s%overshoot_Delta0(j)
@@ -455,7 +463,7 @@
 
 
 
-      subroutine JermynAnders_penetration(s, id)
+      subroutine Dissipation_balanced_penetration(s, id)
          use eos_def
          use star_lib
          use kap_def
@@ -463,14 +471,13 @@
          integer, intent(in) :: id
          real(dp), parameter :: f = 0.86d0
          real(dp), parameter :: xi = 0.6d0
-         integer :: k, j, nz, ierr
+         integer :: k, j, ierr
          real(dp) :: Lint, V_CZ, Favg, RHS, dr, h, dLint
          real(dp) :: r_cb
-         nz = s%nz
 
          V_CZ = 0d0
          Lint = 0d0
-         ! TODO failsafe if no conv core present
+
          call star_eval_conv_bdy_k(s, 1, k, ierr)
          call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
          r_core = r_cb
@@ -479,7 +486,7 @@
          h = s%scale_height(k)
 
          ! Integrate over cells that are fully in CZ
-         do j=nz,k+1,-1
+         do j=s%nz,k+1,-1
              dr = s%dm(j) / (4d0 * pi * pow2(s%r(j)) * s%rho(j))
              Lint = Lint + s%L_conv(j) * dr
          end do
@@ -495,7 +502,7 @@
          Lint = 0d0
 
          ! Integrate over RZ until we find the edge of the PZ
-         !remainder of cell k (non-convective part)
+         ! remainder of cell k (non-convective part)
          dr = s%r(k) - r_cb
          Lint = Lint + (xi * f * 4d0 * pi * pow2(s%r(j)) * Favg + s%L(j) * (s%grada(j) / s%gradr(j) - 1d0)) * dr
 
@@ -514,7 +521,7 @@
             Lint = Lint + dLint
          end do
 
-      end subroutine JermynAnders_penetration
+      end subroutine Dissipation_balanced_penetration
 
 
       end module run_star_extras
