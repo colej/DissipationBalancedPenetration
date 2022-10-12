@@ -29,7 +29,7 @@
 
       implicit none
 
-      real (dp) :: m_core, dm_core, dr_core, dr_core_div_h, r_core, rho_core_top
+      real (dp) :: m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top
 
       ! these routines are called by the standard run_star check_model
       contains
@@ -137,7 +137,7 @@
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
-          how_many_extra_history_columns = 6
+          how_many_extra_history_columns = 7
       end function how_many_extra_history_columns
 
 
@@ -145,26 +145,30 @@
           integer, intent(in) :: id, n
           character (len=maxlen_history_column_name) :: names(n)
           real(dp) :: vals(n)
+          real(dp) :: r_cb
           integer, intent(out) :: ierr
           type (star_info), pointer :: s
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
+          call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
 
-          names(1) = 'm_core_pen'
-          names(2) = 'dm_core_pen'
-          names(3) = 'dr_core_pen'
-          names(4) = 'dr_core_div_h_pen'
-          names(5) = 'r_core_pen'
+          names(1) = 'm_core'
+          names(2) = 'mass_pen_zone'
+          names(3) = 'delta_r_pen_zone'
+          names(4) = 'alpha_pen_zone'
+          names(5) = 'r_core'
           names(6) = 'rho_core_top_pen'
+          names(7) = 'r_cb'
 
-          vals(1) = m_core
-          vals(2) = dm_core
-          vals(3) = dr_core
-          vals(4) = dr_core_div_h
-          vals(5) = r_core
+          vals(1) = m_core/Msun
+          vals(2) = mass_PZ/Msun
+          vals(3) = delta_r_PZ/Rsun
+          vals(4) = alpha_PZ
+          vals(5) = r_core/Rsun
           vals(6) = rho_core_top
+          vals(7) = r_cb/Rsun
 
 
       end subroutine data_for_extra_history_columns
@@ -344,9 +348,6 @@
           integer  :: dk, k, k_ob
           real(dp) :: r, dr, r_step
 
-          ! real(dp) :: dm_core, dr_core, dr_core_div_h, r_core, m_core, rho_core_top
-
-
           ! Evaluate the overshoot diffusion coefficient D(k_a:k_b) and
           ! mixing velocity vc(k_a:k_b) at the i'th convective boundary,
           ! using the j'th set of overshoot parameters. The overshoot
@@ -359,11 +360,11 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
-          ! call JermynAnders_active_penetration(s, id) !, m_core, dm_core, dr_core, dr_core_div_h, r_core, rho_core_top)
-          call JermynAnders_penetration(s, id) !, m_core, dm_core, dr_core, dr_core_div_h, r_core, rho_core_top)
+          ! call JermynAnders_active_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
+          call JermynAnders_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
 
           ! Extract parameters
-          f = dr_core_div_h        ! extend of step function (a_ov)
+          f = alpha_PZ        ! extend of step function (a_ov)
           f0 = s%overshoot_f0(j)
           f2 = 0.01            ! exponential decay (f_ov)
 
@@ -439,7 +440,7 @@
 
           end do face_loop
 
-          write(*,*)  'alpha_pen = ', dr_core_div_h
+          ! write(*,*)  'alpha_pen = ', alpha_PZ
           !write(*,*)  'mcc = ', s% mass_conv_core
 
           if (DEBUG) then
@@ -458,98 +459,62 @@
          use eos_def
          use star_lib
          use kap_def
-         real(dp), parameter :: f = 0.86d0
          type (star_info), pointer :: s
          integer, intent(in) :: id
+         real(dp), parameter :: f = 0.86d0
          real(dp), parameter :: xi = 0.6d0
          integer :: k, j, nz, ierr
-         real(dp) :: Lint, delta_r, V_CZ, Favg, RHS, dr, h
-         real(dp) :: Rho, T, logRho, logT, Pr
-         ! real(dp), intent(out) :: dm_core, dr_core, dr_core_div_h, r_core, m_core, rho_core_top
-         real(dp), dimension(num_eos_basic_results) :: res, dres_dlnRho, dres_dlnT
-         real(dp) :: dres_dxa(num_eos_d_dxa_results,s% species)
-         real(dp) :: kap, dlnkap_dlnRho, dlnkap_dlnT, frac_Type2
-         real(dp) :: gradr(s%nz), grada(s%nz), gradL(s%nz)
-         real(dp) :: kap_fracs(num_kap_fracs)
-
+         real(dp) :: Lint, V_CZ, Favg, RHS, dr, h, dLint
+         real(dp) :: r_cb
          nz = s%nz
 
-         ! Recalculate gradR and gradA assuming the composition of the core.
-         do j=1,nz
-            ! Call the EOS with the composition of the convective core
-            Rho = s%rho(j)
-            T = s%T(j)
-            logRho = log10(Rho)
-            logT = log10(T)
-            ierr = 0
-            call star_get_eos( &
-               id, 0, s%xa(:,nz), & ! k = 0 means not being called for a particular cell
-               Rho, logRho, T, logT, &
-               res, dres_dlnRho, dres_dlnT, &
-               dres_dxa, ierr)
-            grada(j) = res(i_grad_ad)
-
-            ! Call the opacity with the composition of the convective core.
-            ierr = 0
-            call star_get_kap( &
-               id, 0, s%zbar(nz), s%xa(:,nz), logRho, logT, &
-               res(i_lnfree_e), dres_dlnRho(i_lnfree_e), dres_dlnT(i_lnfree_e), &
-               res(i_eta), dres_dlnRho(i_eta), dres_dlnT(i_eta), &
-               kap_fracs, kap, dlnkap_dlnRho, dlnkap_dlnT, ierr)
-
-            Pr = one_third*crad*T*T*T*T
-            gradr(j) = s%Peos(j)*kap*s%L(j) / (16*pi*clight*s%m(j)*s%cgrav(j)*Pr)
-
-         end do
-
-         delta_r = 0d0
          V_CZ = 0d0
          Lint = 0d0
+         ! TODO failsafe if no conv core present
+         call star_eval_conv_bdy_k(s, 1, k, ierr)
+         call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
+         r_core = r_cb
+         m_core = s%m(k)
+         rho_core_top = s%rho(k)
+         h = s%scale_height(k)
 
-         ! Integrate over CZ
-         do j=nz,1,-1
-         if (gradr(j) < grada(j)) then
-               ! Means we've hit a radiative zone
-               m_core = s%m(j)
-               r_core = s%r(j)
-               rho_core_top = s%rho(j)
-               h = s%scale_height(j)
-               k = j
-               exit
-            end if
-
-            dr = s%dm(j) / (4d0 * pi * pow2(s%r(j)) * s%rho(j))
-            Lint = Lint + s%L_conv(j) * dr
-            delta_r = delta_r + dr
-            V_CZ = V_CZ + s%dm(j)/s%rho(j)
-
+         ! Integrate over cells that are fully in CZ
+         do j=nz,k+1,-1
+             dr = s%dm(j) / (4d0 * pi * pow2(s%r(j)) * s%rho(j))
+             Lint = Lint + s%L_conv(j) * dr
          end do
+        ! Take cell that is partially convective
+        ! convective part of cell k
+         dr = r_cb - s%r(k+1)
+         Lint = Lint + s%L_conv(k) * dr
 
          ! Calculate target RHS
+         V_CZ = 4d0/3d0 * pi * r_cb*r_cb*r_cb
          Favg = Lint / V_CZ
-         RHS = (1d0 - f) * V_CZ * Favg
+         RHS = (1d0 - f) * Lint
          Lint = 0d0
 
          ! Integrate over RZ until we find the edge of the PZ
-         delta_r = 0d0
-         do j=min(nz,k+1),1,-1
-            dr = s%dm(j) / (4d0 * pi * pow2(s%r(j)) * s%rho(j))
-            delta_r = delta_r + dr
-            Lint = Lint + (xi * f * 4d0 * pi * pow2(s%r(j)) * Favg + s%L(j) * (grada(j) / gradr(j) - 1d0)) * dr
+         !remainder of cell k (non-convective part)
+         dr = s%r(k) - r_cb
+         Lint = Lint + (xi * f * 4d0 * pi * pow2(s%r(j)) * Favg + s%L(j) * (s%grada(j) / s%gradr(j) - 1d0)) * dr
 
-            if (Lint > RHS) then
-               dm_core = s%m(j) - m_core
-               dr_core = delta_r
-               dr_core_div_h = delta_r / h
+         do j=k-1,1,-1
+            dr = s%dm(j) / (4d0 * pi * pow2(s%r(j)) * s%rho(j))
+            dLint = (xi * f * 4d0 * pi * pow2(s%r(j)) * Favg + s%L(j) * (s%grada(j) / s%gradr(j) - 1d0)) * dr
+
+            if (Lint + dLint > RHS) then
+               dr = dr*(RHS - Lint)/dLint
+
+               mass_PZ = s%m(j) - m_core !just history output
+               delta_r_PZ = s%r(j-1)+dr - r_cb
+               alpha_PZ = delta_r_PZ / h
                exit
             end if
-
+            Lint = Lint + dLint
          end do
 
       end subroutine JermynAnders_penetration
-
-
-
 
 
       end module run_star_extras
