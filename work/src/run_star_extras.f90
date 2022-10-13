@@ -30,6 +30,7 @@
       implicit none
 
       real (dp) :: m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top
+      integer :: k_PZ_top, k_PZ_bottom
 
       ! these routines are called by the standard run_star check_model
       contains
@@ -104,10 +105,16 @@
           integer :: ierr
           type (star_info), pointer :: s
           logical :: do_retry
+          integer k
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
           extras_check_model = keep_going
+
+          ! Flag PZ as anonymous_mixing
+          do k=k_PZ_bottom, k_PZ_top, -1
+              s%mixing_type(k) = anonymous_mixing
+          end do
 
 
           do_retry = .false.
@@ -364,6 +371,7 @@
           end if
 
           call dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
+          ! alpha_PZ is distance from core boundary outward, so add f0 to it to make PZ zone reach that region
           alpha_PZ = alpha_PZ + s%overshoot_f0(j)
           ! Extract parameters
           f = alpha_PZ                     ! extend of step function (a_ov)
@@ -421,7 +429,6 @@
 
               if (dr < r_step .AND. f > 0.0_dp) then  ! step factor
                   factor = 1.0_dp
-                  s%mixing_type(k) = anonymous_mixing
               else
                   if ( f2 > 0.0_dp) then                ! exponential factor
                       factor = exp(-2.0_dp*(dr-r_step)/(f2*Hp_cb))
@@ -471,6 +478,7 @@
 
          call star_eval_conv_bdy_k(s, 1, k, ierr)
          call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
+         k_PZ_bottom = k
          r_core = r_cb
          m_core = s%m(k)
          rho_core_top = s%rho(k)
@@ -507,6 +515,7 @@
                mass_PZ = s%m(j) - m_core !used for history output
                delta_r_PZ = s%r(j-1)+dr - r_cb
                alpha_PZ = delta_r_PZ / h
+               k_PZ_top = j
                exit
             end if
             Lint = Lint + dLint
