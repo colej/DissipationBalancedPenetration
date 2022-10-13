@@ -197,9 +197,6 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
-          ! vals_nr = 1
-          ! call prof_hydroEq(id, names, vals, vals_nr, nz, ierr)
-
       end subroutine data_for_extra_profile_columns
 
 
@@ -291,7 +288,7 @@
           integer, intent(in) :: id
           integer, intent(out) :: ierr
           type(star_info), pointer :: s
-          real(dp) :: fraction, Peclet_number, diffusivity, Hp       ! f is fraction to compose grad_T = f*grad_ad + (1-f)*grad_rad
+          real(dp) :: fraction, Peclet_number, diffusivity    ! f is fraction to compose grad_T = f*grad_ad + (1-f)*grad_rad
           integer :: k
           logical, parameter :: DEBUG = .FALSE.
 
@@ -312,9 +309,7 @@
               if (s%D_mix(k) <= s% min_D_mix) exit
 
               diffusivity = 16.0_dp * boltz_sigma * pow3(s% T(k)) / ( 3.0_dp * s% opacity(k) * pow2(s% rho(k)) * s% cp(k) )
-              ! Hp = s% P(k)/(s% rho(k)*s% grav(k)) ! Pressure scale height
-              Hp = s% scale_height(k) ! Pressure scale height
-              Peclet_number = s% conv_vel(k) * Hp * s% mixing_length_alpha / diffusivity
+              Peclet_number = s% conv_vel(k) * s% scale_height(k) * s% mixing_length_alpha / diffusivity
 
               if (Peclet_number >= 100.0_dp) then
                   fraction = 1.0_dp
@@ -368,10 +363,10 @@
               return
           end if
 
-          call Dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
+          call dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
 
           ! Extract parameters
-          f = alpha_PZ        ! extend of step function (a_ov)
+          f = alpha_PZ + s%overshoot_f0(j) ! extend of step function (a_ov)
           f0 = s%overshoot_f0(j)
           f2 = s%overshoot_f(j)            ! exponential decay (f_ov)
 
@@ -447,9 +442,6 @@
 
           end do face_loop
 
-          ! write(*,*)  'alpha_pen = ', alpha_PZ
-          !write(*,*)  'mcc = ', s% mass_conv_core
-
           if (DEBUG) then
               write(*,*) 'step exponential overshoot:'
               write(*,*) '  k_a, k_b   =', k_a, k_b
@@ -462,7 +454,7 @@
 
 
 
-      subroutine Dissipation_balanced_penetration(s, id)
+      subroutine dissipation_balanced_penetration(s, id)
          use eos_def
          use star_lib
          use kap_def
@@ -512,7 +504,7 @@
             if (Lint + dLint > RHS) then
                dr = dr*(RHS - Lint)/dLint
 
-               mass_PZ = s%m(j) - m_core !just history output
+               mass_PZ = s%m(j) - m_core !used for history output
                delta_r_PZ = s%r(j-1)+dr - r_cb
                alpha_PZ = delta_r_PZ / h
                exit
@@ -520,7 +512,7 @@
             Lint = Lint + dLint
          end do
 
-      end subroutine Dissipation_balanced_penetration
+      end subroutine dissipation_balanced_penetration
 
 
       end module run_star_extras
