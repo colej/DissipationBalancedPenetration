@@ -364,9 +364,9 @@
           end if
 
           call dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
-
+          alpha_PZ = alpha_PZ + s%overshoot_f0(j)
           ! Extract parameters
-          f = alpha_PZ + s%overshoot_f0(j) ! extend of step function (a_ov)
+          f = alpha_PZ                     ! extend of step function (a_ov)
           f0 = s%overshoot_f0(j)
           f2 = s%overshoot_f(j)            ! exponential decay (f_ov)
 
