@@ -62,8 +62,8 @@ do_history_file = .true.
 history_interval = 1
 star_history_name = '08Msun_DBCP.history'
 
-write_profiles_flag = .false.
-profile_interval = 50
+write_profiles_flag = .true.
+profile_interval = 100
 profile_data_prefix = '08Msun_DBCP_'
 profile_data_suffix = '.profile'
 
@@ -89,10 +89,10 @@ initial_z = 0.02
 ! Lnuc_div_L_zams_limit = 0.99d0
 stop_near_zams = .false.
 ! stop at C depletion?
-x_logical_ctrl(1) = .false.
+x_logical_ctrl(1) = .true.
 ! stop at onset of core-collapse and switch to large network on the fly?
 ! not that this will overwrite the x_logical_ctrl(1
-x_logical_ctrl(2) = .true.
+x_logical_ctrl(2) = .false.
 
 ! stop when the center mass fraction of h1 drops below this limit
 ! xa_central_lower_limit_species(1) = 'h1'
@@ -140,6 +140,7 @@ overshoot_zone_loc(1) = 'core'
 overshoot_bdy_loc(1) = 'top'
 
 overshoot_f0(1) = 0.005
+overshoot_f(1) = 0.01
 ! overshoot_D0(1) = 0.005
 
 hot_wind_scheme = 'Dutch'
