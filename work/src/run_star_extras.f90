@@ -26,11 +26,13 @@
       use star_def
       use const_def
       use math_lib
+      use chem_def
 
       implicit none
 
       real (dp) :: m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top
       integer :: k_PZ_top, k_PZ_bottom
+      logical :: doing_DBP = .false.
 
       !extra meshing controls
        real(dp) :: xtra_dist_below, xtra_dist_above_ov, xtra_dist_above_bv, xtra_coeff_mesh
@@ -105,6 +107,7 @@
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
+          doing_DBP = .false.
           extras_start_step = 0
       end function extras_start_step
 
@@ -122,10 +125,11 @@
           extras_check_model = keep_going
 
           ! Flag PZ as anonymous_mixing
-          do k=k_PZ_bottom, k_PZ_top, -1
-              s%mixing_type(k) = anonymous_mixing
-          end do
-
+          if (doing_DBP) then
+            do k=k_PZ_bottom, k_PZ_top, -1
+                s%mixing_type(k) = anonymous_mixing
+            end do
+          endif
 
           do_retry = .false.
           ! Terminate and save the pre-main sequence model when the convective core appears.
@@ -284,6 +288,13 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
           extras_finish_step = keep_going
+
+          ! stop at oxygen depletion
+          if ((s%xa(s%net_iso(io16), s%nz) >= 0.5 ) .and. (s%xa(s%net_iso(ic12), s%nz) <= 1e-5)) then
+             write(*,*) "Oxygen depletion"
+             extras_finish_step = terminate
+          end if
+
 
           if (extras_finish_step == terminate) s% termination_code = t_extras_finish_step
 
@@ -483,6 +494,7 @@
          real(dp) :: Lint, V_CZ, Favg, RHS, dr, h, dLint
          real(dp) :: r_cb
 
+         doing_DBP = .true.
          V_CZ = 0d0
          Lint = 0d0
 
@@ -566,7 +578,7 @@
           end do
 
           do k = s% nz, 1, -1
-              ! Start increasing te mesh once closer than the given distance (in Hp) to the core boundary
+              ! Start increasing the mesh once closer than the given distance (in Hp) to the core boundary
               if (s%r(k) > r_lower) then
                   if (xtra_coeff_mesh < s% mesh_delta_coeff_factor(k)) then
                       s% mesh_delta_coeff_factor(k) = xtra_coeff_mesh
