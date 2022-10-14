@@ -365,7 +365,7 @@
           ! Extract parameters
           f = alpha_PZ        ! extend of step function (a_ov)
           f0 = s%overshoot_f0(j)
-          f2 = 0.01            ! exponential decay (f_ov)
+          f2 = 0.005            ! exponential decay (f_ov)
 
           D0 = s%overshoot_D0(j)
           Delta0 = s%overshoot_Delta0(j)
@@ -517,3 +517,86 @@
 
 
       end module run_star_extras
+
+!      subroutine predict_fov(s, id)
+!         ! use eos_def
+!         ! use star_lib
+!         ! use kap_def
+!         ! real(dp), parameter :: f = 0.86d0
+!         ! type (star_info), pointer :: s
+!         ! integer, intent(in) :: id
+!         ! real(dp), parameter :: xi = 0.6d0
+!         ! integer :: k, j, nz, ierr
+!         ! real(dp) :: Lint, delta_r, V_CZ, Favg, RHS, dr, h
+!         ! real(dp) :: Rho, T, logRho, logT, Pr
+!         ! ! real(dp), intent(out) :: dm_core, dr_core, dr_core_div_h, r_core, m_core, rho_core_top
+!         ! real(dp), dimension(num_eos_basic_results) :: res, dres_dlnRho, dres_dlnT
+!         ! real(dp) :: dres_dxa(num_eos_d_dxa_results,s% species)
+!         ! real(dp) :: kap, dlnkap_dlnRho, dlnkap_dlnT, frac_Type2
+!         ! real(dp) :: gradr(s%nz), grada(s%nz), gradL(s%nz)
+!         ! real(dp) :: kap_fracs(num_kap_fracs)
+!
+!         use eos_def
+!         use star_lib
+!         use kap_def
+!         type (star_info), pointer :: s
+!         integer, intent(in) :: id
+!         integer :: k, j, nz, ierr
+!         real(dp) :: Lint, V_CZ, Favg, RHS, dr, hp_core, dLint
+!         real(dp) :: r_cb
+!
+!         nz = s%nz
+!
+!         ! TODO failsafe if no conv core present
+!         call star_eval_conv_bdy_k(s, 1, k, ierr)
+!         call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
+!         r_core = r_cb
+!         hp_core = s%scale_height(k)
+!
+!         ! Get the average convective velocity in the convective core
+!         summed_conv_vel = 0.0
+!         do j = nz, k+1, -1
+!            summed_conv_vel = summed_conv_vel + s% conv_vel(j)
+!         end do
+!
+!         averaged_conv_vel = summed_conv_vel / (nz-k-1)
+!
+!         ! Calculate the convective frequency using the averaged convective
+!         ! velocity
+!
+!         conv_freq = averaged_conv_vel / r_core
+!
+!
+!
+!
+!         ! Quantities we need:
+!         !    Radius conv core
+!         !    pressure_scale_height
+!         !    convective velocity
+!         !    Brunt Vaisalla Frequency
+!         ! We need to average the convective velocity over the convective core
+!         ! We need to get the average of the Brunt over the region where the
+!         !   mechanical overshooting occurred in the previous step
+!         !   THIS WILL IMPACT THE STIFFNESS
+!         !   Choice of first fov will impact the resulting calculations
+!         ! TEST: vary region over which we average the Brunt
+!         !       vary the denominator for the convective frequency from Hp --> Rcc
+!
+!         ! Get the cell number where gradr = grada, i.e. Schwarzchild boundary
+!         k =
+!         r_core =
+!
+!
+!
+!
+!
+!
+!
+!         stiffness = pow2(averaged_BV)/(2*PI*pow2(conv_freq))
+!
+!         f_ov = 1.5 / SQRT(2*PI*stiffness)
+!
+!
+!
+!      end subroutine predict_fov
+!
