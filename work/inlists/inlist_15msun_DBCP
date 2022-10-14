@@ -13,7 +13,7 @@ create_pre_main_sequence_model = .false.
 
 ! save a model at the end of the run
 save_model_when_terminate = .false.
-save_model_filename = '08Msun_pen_at_TAMS_large_net.mod'
+save_model_filename = '15tmuMsun_pen_at_TAMS_large_net.mod'
 
 ! display on-screen plots
 pgstar_flag = .true.
@@ -82,8 +82,8 @@ interpolate_rho_for_pulse_data = .true.
 ! see star/defaults/controls.defaults
 
 ! starting specifications
-initial_mass = 8. ! in Msun units
-initial_z = 0.02
+initial_mass = 15.0d0 ! in Msun units
+initial_z = 0.02d0
 !initial_y = 0.276
 
 ! when to stop

@@ -284,15 +284,36 @@
           integer, intent(in) :: id
           integer :: ierr
           type (star_info), pointer :: s
+          character (len=200) :: fname
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
           extras_finish_step = keep_going
 
-          ! stop at oxygen depletion
-          if ((s%xa(s%net_iso(io16), s%nz) >= 0.5 ) .and. (s%xa(s%net_iso(ic12), s%nz) <= 1e-5)) then
-             write(*,*) "Oxygen depletion"
-             extras_finish_step = terminate
+          ! stop at carbon depletion
+          if (s% x_logical_ctrl(1) .eqv. .true.) then
+             if ((s%xa(s%net_iso(io16), s%nz) >= 0.5 ) .and. (s%xa(s%net_iso(ic12), s%nz) <= 1e-5)) then
+                write(*,*) "Carbon depletion"
+                extras_finish_step = terminate
+                write(fname, fmt="(a10)") 'C_depl.mod'
+                call star_write_model(s% id, fname, ierr)
+             end if
+          end if
+          ! stop at onset of core-collapse
+          if (s% x_logical_ctrl(2) .eqv. .true.) then
+             ! don't stop at O depletion
+             s% x_logical_ctrl(1) = .false.
+             ! change net on the fly post C depletion
+             if ((s%xa(s%net_iso(io16), s%nz) >= 0.5 ) .and. (s%xa(s%net_iso(ic12), s%nz) <= 1e-5)) then
+                write(fname, fmt="(a10)") 'C_depl.mod'
+                call star_write_model(s% id, fname, ierr)
+                s% job% change_net = .true.
+                s% job% change_initial_net = .true.
+                s% job% new_net_name = "mesa_128.net"
+                write(*,*) "Change net to ", s% job%new_net_name
+                ! flip switch so we don't enter here again
+                s% x_logical_ctrl(2) = .false.
+             end if
           end if
 
 
