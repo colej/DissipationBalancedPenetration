@@ -288,6 +288,13 @@
           if (ierr /= 0) return
           extras_finish_step = keep_going
 
+          ! stop at oxygen depletion
+          if ((s%xa(s%net_iso(io16), s%nz) >= 0.5 ) .and. (s%xa(s%net_iso(ic12), s%nz) <= 1e-5)) then
+             write(*,*) "Oxygen depletion"
+             extras_finish_step = terminate
+          end if
+
+
           if (extras_finish_step == terminate) s% termination_code = t_extras_finish_step
 
       end function extras_finish_step
