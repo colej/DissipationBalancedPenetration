@@ -30,6 +30,17 @@
       implicit none
 
       real (dp) :: m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top
+      integer :: k_PZ_top, k_PZ_bottom
+
+      !extra meshing controls
+       real(dp) :: xtra_dist_below, xtra_dist_above_ov, xtra_dist_above_bv, xtra_coeff_mesh
+
+       namelist /xtra_coeff_cb/ &
+          xtra_dist_below, &
+          xtra_dist_above_ov, &
+          xtra_dist_above_bv, &
+          xtra_coeff_mesh
+
 
       ! these routines are called by the standard run_star check_model
       contains
@@ -64,10 +75,10 @@
           s% other_overshooting_scheme => extended_convective_penetration
 
           ! Add extra meshing
-          ! s% use_other_mesh_delta_coeff_factor = .true.
-          ! call read_inlist_xtra_coeff_core_boundary(ierr) ! Read inlist
-          ! if (ierr /= 0) return
-          ! s% other_mesh_delta_coeff_factor => mesh_delta_coeff_core_boundary
+          s% use_other_mesh_delta_coeff_factor = .true.
+          call read_inlist_xtra_coeff_core_boundary(ierr) ! Read inlist
+          if (ierr /= 0) return
+          s% other_mesh_delta_coeff_factor => mesh_delta_coeff_core_boundary
 
 
           ! s% kap_rq% Zbase = Z_ini ! set Z for opacity tables
@@ -104,10 +115,16 @@
           integer :: ierr
           type (star_info), pointer :: s
           logical :: do_retry
+          integer k
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
           extras_check_model = keep_going
+
+          ! Flag PZ as anonymous_mixing
+          do k=k_PZ_bottom, k_PZ_top, -1
+              s%mixing_type(k) = anonymous_mixing
+          end do
 
 
           do_retry = .false.
@@ -196,9 +213,6 @@
           ierr = 0
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
-
-          ! vals_nr = 1
-          ! call prof_hydroEq(id, names, vals, vals_nr, nz, ierr)
 
       end subroutine data_for_extra_profile_columns
 
@@ -291,7 +305,7 @@
           integer, intent(in) :: id
           integer, intent(out) :: ierr
           type(star_info), pointer :: s
-          real(dp) :: fraction, Peclet_number, diffusivity, Hp       ! f is fraction to compose grad_T = f*grad_ad + (1-f)*grad_rad
+          real(dp) :: fraction, Peclet_number, diffusivity    ! f is fraction to compose grad_T = f*grad_ad + (1-f)*grad_rad
           integer :: k
           logical, parameter :: DEBUG = .FALSE.
 
@@ -312,9 +326,7 @@
               if (s%D_mix(k) <= s% min_D_mix) exit
 
               diffusivity = 16.0_dp * boltz_sigma * pow3(s% T(k)) / ( 3.0_dp * s% opacity(k) * pow2(s% rho(k)) * s% cp(k) )
-              ! Hp = s% P(k)/(s% rho(k)*s% grav(k)) ! Pressure scale height
-              Hp = s% scale_height(k) ! Pressure scale height
-              Peclet_number = s% conv_vel(k) * Hp * s% mixing_length_alpha / diffusivity
+              Peclet_number = s% conv_vel(k) * s% scale_height(k) * s% mixing_length_alpha / diffusivity
 
               if (Peclet_number >= 100.0_dp) then
                   fraction = 1.0_dp
@@ -360,12 +372,21 @@
           call star_ptr(id, s, ierr)
           if (ierr /= 0) return
 
-          call Dissipation_balanced_penetration(s, id)
+          if ((i .ne. 1) .or. (s%mixing_type(s%nz) .ne. convective_mixing)) then
+              write(*,'(A,i2,A,i2)') 'ERROR: dissipation_balanced_penetration can only be used for core convection, &
+                    &so the first convective boundary. The routine got called for convective boundary number ',i, &
+                    &', and the mixing type in the core was', s%mixing_type(s%nz)
+              ierr = -1
+              return
+          end if
 
+          call dissipation_balanced_penetration(s, id) !, m_core, mass_PZ, delta_r_PZ, alpha_PZ, r_core, rho_core_top)
+          ! alpha_PZ is distance from core boundary outward, so add f0 to it to make PZ zone reach that region
+          alpha_PZ = alpha_PZ + s%overshoot_f0(j)
           ! Extract parameters
-          f = alpha_PZ        ! extend of step function (a_ov)
+          f = alpha_PZ                     ! extend of step function (a_ov)
           f0 = s%overshoot_f0(j)
-          f2 = 0.01            ! exponential decay (f_ov)
+          f2 = s%overshoot_f(j)            ! exponential decay (f_ov)
 
           D0 = s%overshoot_D0(j)
           Delta0 = s%overshoot_Delta0(j)
@@ -418,7 +439,6 @@
 
               if (dr < r_step .AND. f > 0.0_dp) then  ! step factor
                   factor = 1.0_dp
-                  s%mixing_type(k) = anonymous_mixing
               else
                   if ( f2 > 0.0_dp) then                ! exponential factor
                       factor = exp(-2.0_dp*(dr-r_step)/(f2*Hp_cb))
@@ -439,9 +459,6 @@
 
           end do face_loop
 
-          ! write(*,*)  'alpha_pen = ', alpha_PZ
-          !write(*,*)  'mcc = ', s% mass_conv_core
-
           if (DEBUG) then
               write(*,*) 'step exponential overshoot:'
               write(*,*) '  k_a, k_b   =', k_a, k_b
@@ -454,7 +471,7 @@
 
 
 
-      subroutine Dissipation_balanced_penetration(s, id)
+      subroutine dissipation_balanced_penetration(s, id)
          use eos_def
          use star_lib
          use kap_def
@@ -462,23 +479,23 @@
          integer, intent(in) :: id
          real(dp), parameter :: f = 0.86d0
          real(dp), parameter :: xi = 0.6d0
-         integer :: k, j, nz, ierr
+         integer :: k, j, ierr
          real(dp) :: Lint, V_CZ, Favg, RHS, dr, h, dLint
          real(dp) :: r_cb
-         nz = s%nz
 
          V_CZ = 0d0
          Lint = 0d0
-         ! TODO failsafe if no conv core present
+
          call star_eval_conv_bdy_k(s, 1, k, ierr)
          call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
+         k_PZ_bottom = k
          r_core = r_cb
          m_core = s%m(k)
          rho_core_top = s%rho(k)
          h = s%scale_height(k)
 
          ! Integrate over cells that are fully in CZ
-         do j=nz,k+1,-1
+         do j=s%nz,k+1,-1
              dr = s%dm(j) / (4d0 * pi * pow2(s%r(j)) * s%rho(j))
              Lint = Lint + s%L_conv(j) * dr
          end do
@@ -494,7 +511,7 @@
          Lint = 0d0
 
          ! Integrate over RZ until we find the edge of the PZ
-         !remainder of cell k (non-convective part)
+         ! remainder of cell k (non-convective part)
          dr = s%r(k) - r_cb
          Lint = Lint + (xi * f * 4d0 * pi * pow2(s%r(j)) * Favg + s%L(j) * (s%grada(j) / s%gradr(j) - 1d0)) * dr
 
@@ -505,15 +522,118 @@
             if (Lint + dLint > RHS) then
                dr = dr*(RHS - Lint)/dLint
 
-               mass_PZ = s%m(j) - m_core !just history output
+               mass_PZ = s%m(j) - m_core !used for history output
                delta_r_PZ = s%r(j-1)+dr - r_cb
                alpha_PZ = delta_r_PZ / h
+               k_PZ_top = j
                exit
             end if
             Lint = Lint + dLint
          end do
 
-      end subroutine Dissipation_balanced_penetration
+      end subroutine dissipation_balanced_penetration
 
+      ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      ! Other mesh routine
+      subroutine mesh_delta_coeff_core_boundary(id, ierr)
+          integer, intent(in) :: id
+          ! real(dp), intent(in), dimension(:) :: eps_h, eps_he, eps_z
+          integer, intent(out) :: ierr
+          type (star_info), pointer :: s
+          logical, parameter :: dbg = .false.
+          integer :: k, k_max_N2comp
+          real(dp) :: Hp, r_lower, r_upper_ov, r_upper_BV
+
+          ierr = 0
+          call star_ptr(id, s, ierr)
+          if (ierr /= 0) return
+
+          if (xtra_coeff_mesh == 1d0 .or. xtra_coeff_mesh < 0) return
+          if (s% mixing_type(s% nz) /= convective_mixing) return  ! only enable for convective cores
+
+          r_upper_ov=-1
+          r_upper_BV=-1
+          k_max_N2comp = MAXLOC(s% brunt_n2_composition_term(:), 1)
+          ! Find boundary of convective core, and go inwards by the specified distance (in Hp)
+          do k = s% nz, 1, -1
+              if (s% mixing_type(k) == convective_mixing) then
+                  continue
+              else
+                  Hp = s% scale_height(k)  !s% P(k)/(s% rho(k)*s% grav(k))
+                  r_lower = max (s% r(s%nz), s% r(k) - xtra_dist_below*Hp)
+                  exit
+              endif
+          end do
+
+          do k = s% nz, 1, -1
+              ! Start increasing te mesh once closer than the given distance (in Hp) to the core boundary
+              if (s%r(k) > r_lower) then
+                  if (xtra_coeff_mesh < s% mesh_delta_coeff_factor(k)) then
+                      s% mesh_delta_coeff_factor(k) = xtra_coeff_mesh
+                  end if
+              else
+                  cycle
+              endif
+
+              ! Go up to the given distance past the overshoot boundary
+              if (r_upper_ov<0 .and. s% mixing_type(k) /= overshoot_mixing .and. s% mixing_type(k) /= convective_mixing) then
+                  if (xtra_dist_above_ov > 0) then
+                      Hp = s% scale_height(k) !s% P(k)/(s% rho(k)*s% grav(k))
+                      r_upper_ov = min(s% r(1), s% r(k) + xtra_dist_above_ov*Hp)
+                  else
+                      r_upper_ov = 0
+                  end if
+              end if
+
+              ! Go up to the given distance past the order in magnitude decrease in BV composition term, outwards of its maximum
+              if (r_upper_BV<0 .and. k < k_max_N2comp .and. (s% brunt_n2_composition_term(k)*10 < maxval(s% brunt_n2_composition_term(:))) ) then
+                  if (xtra_dist_above_bv > 0) then
+                      Hp = s% scale_height(k) !s% P(k)/(s% rho(k)*s% grav(k))
+                      r_upper_BV = min(s% r(1), s% r(k) + xtra_dist_above_bv*Hp)
+                  else
+                      r_upper_BV = 0
+                  end if
+              end if
+
+              ! Stop increasing mesh when further than the specified distance from both the overshoot boundary and BV composition peak
+              if (s% r(k) > r_upper_ov .and. s% r(k) > r_upper_BV .and. r_upper_ov >=0 .and. r_upper_BV >=0) exit
+          end do
+
+      end subroutine mesh_delta_coeff_core_boundary
+      ! %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      subroutine read_inlist_xtra_coeff_core_boundary(ierr)
+          use utils_lib
+          integer, intent(out) :: ierr
+          character (len=256) :: filename, message
+          integer :: unit
+
+          filename = 'inlist_xtra_coeff_mesh'
+          write(*,*) 'read inlist_xtra_coeff_mesh'
+
+          ! set defaults
+          xtra_dist_below = 0.1d0
+          xtra_dist_above_ov = 0.1d0
+          xtra_dist_above_bv = 0.1d0
+          xtra_coeff_mesh = 0.15d0
+
+          open(newunit=unit, file=trim(filename), action='read', delim='quote', iostat=ierr)
+          if (ierr /= 0) then
+              write(*, *) 'Failed to open control namelist file ', trim(filename)
+          else
+              read(unit, nml=xtra_coeff_cb, iostat=ierr)
+              close(unit)
+              if (ierr /= 0) then
+                  write(*, *) 'Failed while trying to read control namelist file ', trim(filename)
+                  write(*, '(a)') &
+                  'The following runtime error message might help you find the problem'
+                  write(*, *)
+                  open(newunit=unit, file=trim(filename), action='read', delim='quote', status='old', iostat=ierr)
+                  read(unit, nml=xtra_coeff_cb)
+                  close(unit)
+              end if
+          end if
+
+      end subroutine read_inlist_xtra_coeff_core_boundary
 
       end module run_star_extras
