@@ -175,6 +175,18 @@
 
           call star_eval_conv_bdy_r(s, 1, r_cb, ierr)
 
+          if (.not. doing_DBP) then
+              mass_PZ=0
+              delta_r_PZ=0
+              alpha_PZ=0
+
+              call star_eval_conv_bdy_k(s, 1, k, ierr)
+              r_core = r_cb
+              m_core = s%m(k)
+              rho_core_top = s%rho(k)
+              h = s%scale_height(k)
+          endif
+
           names(1) = 'm_core'
           names(2) = 'mass_pen_zone'
           names(3) = 'delta_r_pen_zone'
@@ -548,7 +560,7 @@
          dr = s%r(k) - r_cb
          dLint = (xi * f * 4d0 * pi * pow2(s%r(j)) * Favg + s%L(j) * (s%grada(j) / s%gradr(j) - 1d0)) * dr
          Lint = dLint
-         
+
          if (Lint > RHS) then
             dr = dr*(RHS - Lint)/dLint
 
